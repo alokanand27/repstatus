@@ -1,0 +1,15 @@
+services:
+  repstatus:
+    image: YOUR_DOCKERHUB_USERNAME/repstatus:latest
+    container_name: repstatus
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      MYSQL_HOST: your-slave-host
+      MYSQL_PORT: 3306
+      MONITOR_USER: monitor
+      MONITOR_USER_PASSWORD: secret
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: changeme
+      POLL_INTERVAL_MS: 10000

@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Replication Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #07090f;
+      --surface: #0d1117;
+      --surface2: #131920;
+      --border: #1e2a38;
+      --text: #f0f6ff;
+      --muted: #5a7a99;
+      --green: #00ff88;
+      --yellow: #ffd600;
+      --red: #ff3366;
+      --blue: #00b4ff;
+      --purple: #a855f7;
+      --radius: 12px;
+    }
+
+    body {
+      background: var(--bg);
+      background-image: radial-gradient(ellipse at 20% 0%, rgba(0,180,255,0.07) 0%, transparent 60%),
+                        radial-gradient(ellipse at 80% 100%, rgba(168,85,247,0.06) 0%, transparent 60%);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      padding: 28px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    header h1 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      text-shadow: 0 0 30px rgba(0,180,255,0.3);
+    }
+
+    header h1 span {
+      color: var(--blue);
+      text-shadow: 0 0 20px rgba(0,180,255,0.6);
+    }
+
+    .header-right { display: flex; align-items: center; gap: 16px; }
+
+    #last-updated { font-size: 0.8rem; color: var(--muted); }
+
+    .logout-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 8px;
+      font-size: 0.78rem;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .logout-btn:hover { border-color: var(--red); color: var(--red); box-shadow: 0 0 10px rgba(255,51,102,0.2); }
+
+    /* ---- Cards ---- */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--blue), var(--purple));
+      opacity: 0.7;
+    }
+
+    .card:hover {
+      border-color: rgba(0,180,255,0.3);
+      box-shadow: 0 4px 24px rgba(0,180,255,0.08);
+    }
+
+    .card-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    .card-value {
+      font-size: 2.4rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .card-sub {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 1.05rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .green  { color: var(--green); text-shadow: 0 0 12px rgba(0,255,136,0.5); }
+    .yellow { color: var(--yellow); text-shadow: 0 0 12px rgba(255,214,0,0.5); }
+    .red    { color: var(--red); text-shadow: 0 0 12px rgba(255,51,102,0.5); }
+    .muted  { color: var(--muted); }
+
+    .dot.green  { background: var(--green); box-shadow: 0 0 8px var(--green), 0 0 16px rgba(0,255,136,0.4); }
+    .dot.yellow { background: var(--yellow); box-shadow: 0 0 8px var(--yellow), 0 0 16px rgba(255,214,0,0.4); }
+    .dot.red    { background: var(--red); box-shadow: 0 0 8px var(--red), 0 0 16px rgba(255,51,102,0.4); }
+
+    .thread-pill {
+      display: inline-block;
+      padding: 5px 16px;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin-top: 6px;
+      letter-spacing: 0.3px;
+    }
+    .pill-green { background: rgba(0,255,136,0.12); color: var(--green); border: 1px solid rgba(0,255,136,0.25); box-shadow: 0 0 12px rgba(0,255,136,0.1); }
+    .pill-red   { background: rgba(255,51,102,0.12); color: var(--red);   border: 1px solid rgba(255,51,102,0.25); box-shadow: 0 0 12px rgba(255,51,102,0.1); }
+    .pill-muted { background: rgba(90,122,153,0.12); color: var(--muted); border: 1px solid rgba(90,122,153,0.2); }
+
+    /* ---- Details ---- */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 18px;
+      font-weight: 600;
+    }
+
+    .details-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0;
+    }
+
+    .detail-item {
+      padding: 16px 20px;
+      border-right: 1px solid var(--border);
+    }
+    .detail-item:last-child { border-right: none; }
+
+    .detail-key {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 8px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .detail-val {
+      font-size: 0.95rem;
+      font-family: 'Consolas', 'Courier New', monospace;
+      color: var(--blue);
+      text-shadow: 0 0 10px rgba(0,180,255,0.3);
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    @media (max-width: 700px) {
+      .details-grid { grid-template-columns: repeat(2, 1fr); }
+      .detail-item:nth-child(even) { border-right: none; }
+      .detail-item:not(:nth-last-child(-n+1)) { border-bottom: 1px solid var(--border); }
+    }
+
+    /* ---- Error box ---- */
+    .error-box {
+      background: rgba(255,51,102,0.07);
+      border: 1px solid rgba(255,51,102,0.4);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      font-size: 0.88rem;
+      color: #ff8fab;
+      font-family: 'Consolas', 'Courier New', monospace;
+      word-break: break-all;
+      display: none;
+      box-shadow: 0 0 20px rgba(255,51,102,0.08);
+    }
+
+    /* ---- Chart + History Table ---- */
+    .chart-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .chart-panel {}
+
+    .chart-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+
+    .chart-title {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    canvas { width: 100% !important; }
+
+    /* ---- History Table ---- */
+    .history-panel {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .history-panel-header {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 8px;
+    }
+
+    .download-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 6px;
+      padding: 4px 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .download-btn:hover { border-color: var(--blue); color: var(--blue); box-shadow: 0 0 8px rgba(0,180,255,0.2); }
+    .download-btn svg { display: block; }
+
+    .history-scroll {
+      max-height: 320px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .history-scroll::-webkit-scrollbar { width: 5px; }
+    .history-scroll::-webkit-scrollbar-track { background: transparent; }
+    .history-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+      font-family: 'Consolas', 'Courier New', monospace;
+    }
+
+    .history-table thead th {
+      position: sticky;
+      top: 0;
+      background: var(--surface2);
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 8px 10px;
+      text-align: right;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .history-table thead th:first-child { text-align: left; }
+
+    .history-table tbody tr:hover { background: rgba(0,180,255,0.04); }
+
+    .history-table tbody td {
+      padding: 6px 10px;
+      border-bottom: 1px solid rgba(30,42,56,0.6);
+      color: var(--blue);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .history-table tbody td:first-child {
+      color: var(--muted);
+      text-align: left;
+    }
+
+    .history-table tbody tr:last-child td { border-bottom: none; }
+
+    @media (max-width: 1100px) {
+      .chart-wrap { grid-template-columns: 1fr; }
+      .history-scroll { max-height: 240px; }
+    }
+
+    /* ---- Slow Queries ---- */
+    .slow-queries-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+      margin-top: 20px;
+    }
+
+    .slow-queries-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .slow-queries-notice {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-family: 'Consolas', 'Courier New', monospace;
+    }
+
+    .slow-queries-scroll {
+      max-height: 360px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .slow-queries-scroll::-webkit-scrollbar { width: 5px; }
+    .slow-queries-scroll::-webkit-scrollbar-track { background: transparent; }
+    .slow-queries-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .slow-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+      font-family: 'Consolas', 'Courier New', monospace;
+    }
+
+    .slow-table thead th {
+      position: sticky;
+      top: 0;
+      background: var(--surface2);
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .slow-table thead th.num { text-align: right; }
+
+    .slow-table tbody tr:hover { background: rgba(168,85,247,0.04); }
+
+    .slow-table tbody td {
+      padding: 6px 10px;
+      border-bottom: 1px solid rgba(30,42,56,0.6);
+      color: var(--text);
+      vertical-align: top;
+    }
+
+    .slow-table tbody td.num {
+      text-align: right;
+      color: var(--purple);
+      white-space: nowrap;
+    }
+
+    .slow-table tbody td.ts {
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .slow-table tbody td.qt {
+      color: var(--yellow);
+      white-space: nowrap;
+    }
+
+    .slow-table tbody td.sql-text {
+      max-width: 500px;
+      color: var(--blue);
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+
+    .slow-table tbody tr:last-child td { border-bottom: none; }
+
+    /* ---- Poll error banner ---- */
+    #poll-error {
+      background: rgba(255,51,102,0.08);
+      border: 1px solid rgba(255,51,102,0.4);
+      color: #ff8fab;
+      border-radius: var(--radius);
+      padding: 12px 18px;
+      font-size: 0.85rem;
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    #no-data {
+      text-align: center;
+      color: var(--muted);
+      padding: 60px 20px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>MySQL <span>Replication</span> Dashboard</h1>
+  <div class="header-right">
+    <div id="last-updated">Connecting…</div>
+    <form method="POST" action="/logout" style="margin:0">
+      <button class="logout-btn" type="submit">Sign Out</button>
+    </form>
+  </div>
+</header>
+
+<div id="poll-error"></div>
+<div id="no-data">No replication status available. Is this server configured as a replica?</div>
+
+<div id="main-content" style="display:none">
+
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">Overall Status</div>
+      <div id="card-overall"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Seconds Behind Master</div>
+      <div id="card-lag" class="card-value">—</div>
+      <div id="card-lag-sub" class="card-sub"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">IO Thread</div>
+      <div id="card-io"></div>
+      <div id="card-io-state" class="card-sub"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">SQL Thread</div>
+      <div id="card-sql"></div>
+      <div id="card-sql-state" class="card-sub"></div>
+    </div>
+  </div>
+
+  <div id="error-box" class="error-box"></div>
+
+  <div class="section">
+    <div class="section-title">Replication Details</div>
+    <div class="details-grid" id="details-grid"></div>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart-panel">
+      <div class="chart-header">
+        <span class="chart-title">Seconds Behind Master — Last 3 Hours</span>
+      </div>
+      <canvas id="lag-chart" height="120"></canvas>
+    </div>
+    <div class="history-panel">
+      <div class="history-panel-header">
+        <button class="download-btn" onclick="downloadCSV()" title="Download CSV">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v13M5 13l7 7 7-7"/><line x1="3" y1="21" x2="21" y2="21"/>
+          </svg>
+        </button>
+      </div>
+      <div class="history-scroll">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Observation Time</th>
+              <th>Seconds Behind Master</th>
+              <th>Read Log Pos</th>
+              <th>Exec Log Pos</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody">
+            <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="slow-queries-wrap">
+    <div class="slow-queries-header">
+      <span class="section-title">Slow Queries — Last 3 Hours</span>
+      <span id="slow-queries-notice" class="slow-queries-notice"></span>
+    </div>
+    <div class="slow-queries-scroll">
+      <table class="slow-table">
+        <thead>
+          <tr>
+            <th>Start Time</th>
+            <th>Query Time</th>
+            <th class="num">Rows Examined</th>
+            <th class="num">Rows Sent</th>
+            <th>Query</th>
+          </tr>
+        </thead>
+        <tbody id="slow-queries-tbody">
+          <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let chart = null;
+
+  function initChart() {
+    const ctx = document.getElementById('lag-chart').getContext('2d');
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        datasets: [{
+          label: 'Seconds Behind Master',
+          data: [],
+          borderColor: '#00b4ff',
+          backgroundColor: (ctx) => {
+            const gradient = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height);
+            gradient.addColorStop(0, 'rgba(0,180,255,0.25)');
+            gradient.addColorStop(1, 'rgba(0,180,255,0.0)');
+            return gradient;
+          },
+          borderWidth: 2.5,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          fill: true,
+          tension: 0.4,
+          spanGaps: false,
+        }]
+      },
+      options: {
+        responsive: true,
+        animation: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: {
+            type: 'time',
+            time: { unit: 'minute', displayFormats: { minute: 'HH:mm' } },
+            ticks: { color: '#5a7a99', maxTicksLimit: 12 },
+            grid: { color: 'rgba(30,42,56,0.8)' },
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: '#5a7a99', callback: v => v + 's' },
+            grid: { color: 'rgba(30,42,56,0.8)' },
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#0d1117',
+            borderColor: '#1e2a38',
+            borderWidth: 1,
+            titleColor: '#5a7a99',
+            bodyColor: '#00b4ff',
+            callbacks: {
+              label: ctx => ctx.parsed.y === null ? 'N/A' : ctx.parsed.y + 's behind master'
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function lagColor(s) {
+    if (s === null || s === undefined) return 'red';
+    if (s <= 30) return 'green';
+    if (s <= 300) return 'yellow';
+    return 'red';
+  }
+
+  function threadPill(val) {
+    if (!val) return `<span class="thread-pill pill-muted">Unknown</span>`;
+    return `<span class="thread-pill ${val === 'Yes' ? 'pill-green' : 'pill-red'}">${val}</span>`;
+  }
+
+  function overallBadge(s) {
+    let cls, label;
+    if (s.slaveIoRunning === 'Yes' && s.slaveSqlRunning === 'Yes') {
+      const lag = s.secondsBehindMaster;
+      if (lag === null)  { cls = 'red';    label = 'BROKEN';   }
+      else if (lag === 0){ cls = 'green';  label = 'IN SYNC';  }
+      else if (lag <= 30){ cls = 'green';  label = 'HEALTHY';  }
+      else if (lag <= 300){ cls = 'yellow'; label = 'LAGGING'; }
+      else               { cls = 'red';    label = 'CRITICAL'; }
+    } else {
+      cls = 'red'; label = 'STOPPED';
+    }
+    return `<span class="status-badge"><span class="dot ${cls}"></span><span class="${cls}">${label}</span></span>`;
+  }
+
+  function fmt(v) {
+    return (v === null || v === undefined || v === '')
+      ? `<span style="color:#5a7a99">—</span>`
+      : v;
+  }
+
+  function renderStatus(s) {
+    document.getElementById('card-overall').innerHTML = overallBadge(s);
+
+    const lagEl = document.getElementById('card-lag');
+    const lagSub = document.getElementById('card-lag-sub');
+    if (s.secondsBehindMaster === null) {
+      lagEl.innerHTML = `<span class="red">N/A</span>`;
+      lagSub.textContent = 'Replication may be broken';
+    } else {
+      const c = lagColor(s.secondsBehindMaster);
+      lagEl.innerHTML = `<span class="${c}">${s.secondsBehindMaster}</span>`;
+      lagSub.textContent = '';
+    }
+
+    document.getElementById('card-io').innerHTML = threadPill(s.slaveIoRunning);
+    document.getElementById('card-io-state').textContent = s.slaveIoState || '';
+    document.getElementById('card-sql').innerHTML = threadPill(s.slaveSqlRunning);
+    document.getElementById('card-sql-state').textContent = s.slaveSqlRunningState || '';
+
+    const errBox = document.getElementById('error-box');
+    const errors = [s.lastSqlError, s.lastIoError, s.lastError].filter(Boolean);
+    if (errors.length) {
+      errBox.style.display = 'block';
+      errBox.innerHTML = '<strong>Last Error:</strong> ' + errors.join(' | ');
+    } else {
+      errBox.style.display = 'none';
+    }
+
+    const lastErr = s.lastSqlError || s.lastIoError || s.lastError;
+    const details = [
+      ['Read Master Log Pos', fmt(s.readMasterLogPos)],
+      ['Exec Master Log Pos', fmt(s.execMasterLogPos)],
+      ['Last Error',          lastErr ? `<span style="color:var(--red);text-shadow:0 0 10px rgba(255,51,102,0.4)">${lastErr}</span>` : `<span style="color:var(--green);text-shadow:0 0 10px rgba(0,255,136,0.4)">No Errors</span>`],
+    ];
+    document.getElementById('details-grid').innerHTML = details
+      .map(([k, v]) => `<div class="detail-item"><div class="detail-key">${k}</div><div class="detail-val">${v}</div></div>`)
+      .join('');
+  }
+
+  function fmtDateTime(ts) {
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ` +
+           `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  function renderHistory(history) {
+    if (!chart) return;
+    historyData = history;
+    chart.data.datasets[0].data = history.map(h => ({ x: h.timestamp, y: h.secondsBehindMaster }));
+    chart.update('none');
+
+    const tbody = document.getElementById('history-tbody');
+    if (!history.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No data yet</td></tr>';
+      return;
+    }
+    const rows = [...history].reverse();
+    tbody.innerHTML = rows.map(h => {
+      const lag = h.secondsBehindMaster === null ? '—' : h.secondsBehindMaster;
+      const read = h.readMasterLogPos ?? '—';
+      const exec = h.execMasterLogPos ?? '—';
+      return `<tr>
+        <td>${fmtDateTime(h.timestamp)}</td>
+        <td>${lag}</td>
+        <td>${read}</td>
+        <td>${exec}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function fmtQueryTime(qt) {
+    // qt comes as "HH:MM:SS.ffffff" string from MySQL
+    if (!qt) return '—';
+    const str = typeof qt === 'string' ? qt : String(qt);
+    // Try to extract total seconds
+    const m = str.match(/^(\d+):(\d+):(\d+(?:\.\d+)?)$/);
+    if (m) {
+      const total = parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseFloat(m[3]);
+      return total.toFixed(2) + 's';
+    }
+    return str;
+  }
+
+  function renderSlowQueries(data) {
+    const tbody = document.getElementById('slow-queries-tbody');
+    const notice = document.getElementById('slow-queries-notice');
+
+    if (data.error) {
+      notice.textContent = 'Unavailable: ' + data.error;
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">
+        Could not read slow queries. Requires SELECT on mysql.slow_log or performance_schema.events_statements_history_long.
+      </td></tr>`;
+      return;
+    }
+
+    const sourceLabel = data.source === 'slow_log'
+      ? 'source: mysql.slow_log'
+      : data.source === 'performance_schema'
+        ? 'source: performance_schema (log_output=FILE — no 3h filter)'
+        : '';
+    notice.textContent = (data.queries.length ? `${data.queries.length} queries` : 'No slow queries') +
+                         (sourceLabel ? ' · ' + sourceLabel : '');
+
+    if (!data.queries.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No slow queries in the last 3 hours</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.queries.map(q => {
+      const ts = q.start_time ? new Date(q.start_time).toLocaleString() : '—';
+      const qt = fmtQueryTime(q.query_time);
+      const sql = (q.sql_text || '').substring(0, 300) + (q.sql_text && q.sql_text.length > 300 ? '…' : '');
+      return `<tr>
+        <td class="ts">${ts}</td>
+        <td class="qt">${qt}</td>
+        <td class="num">${q.rows_examined ?? '—'}</td>
+        <td class="num">${q.rows_sent ?? '—'}</td>
+        <td class="sql-text">${sql.replace(/</g, '&lt;')}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function fetchAll() {
+    try {
+      const [statusRes, historyRes, slowRes] = await Promise.all([
+        fetch('/api/status'), fetch('/api/history'), fetch('/api/slow-queries'),
+      ]);
+      const { current, lastPollError, lastUpdated, pollIntervalMs } = await statusRes.json();
+      const history = await historyRes.json();
+      const slowData = await slowRes.json();
+
+      const errBanner = document.getElementById('poll-error');
+      if (lastPollError) {
+        errBanner.style.display = 'block';
+        errBanner.textContent = 'Connection error: ' + lastPollError;
+      } else {
+        errBanner.style.display = 'none';
+      }
+
+      renderSlowQueries(slowData);
+
+      if (current) {
+        document.getElementById('main-content').style.display = 'block';
+        document.getElementById('no-data').style.display = 'none';
+        renderStatus(current);
+        renderHistory(history);
+      } else if (!lastPollError) {
+        document.getElementById('main-content').style.display = 'none';
+        document.getElementById('no-data').style.display = 'block';
+      }
+
+      if (lastUpdated) {
+        const d = new Date(lastUpdated);
+        document.getElementById('last-updated').textContent =
+          `Last updated: ${d.toLocaleTimeString()}`;
+      }
+    } catch (e) {
+      console.error('Fetch failed:', e);
+    }
+  }
+
+  let historyData = [];
+
+  function downloadCSV() {
+    if (!historyData.length) return;
+    const header = 'observation_time,seconds_behind_master,read_master_log_pos,exec_master_log_pos';
+    const rows = [...historyData].reverse().map(h =>
+      `${fmtDateTime(h.timestamp)},${h.secondsBehindMaster ?? ''},${h.readMasterLogPos ?? ''},${h.execMasterLogPos ?? ''}`
+    );
+    const blob = new Blob([header + '\n' + rows.join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `replication_history_${fmtDateTime(Date.now()).replace(/[: ]/g, '-')}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  initChart();
+  let pollInterval = 10000;
+  fetchAll().then(() => setInterval(fetchAll, pollInterval));
+</script>
+</body>
+</html>

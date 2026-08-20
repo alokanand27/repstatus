@@ -1,0 +1,77 @@
+services:
+
+  mysql-master:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+    command: >
+      --server-id=1
+      --log-bin=mysql-bin
+      --gtid-mode=ON
+      --enforce-gtid-consistency=ON
+      --binlog-format=ROW
+    volumes:
+      - ./init/master-init.sql:/docker-entrypoint-initdb.d/master-init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  mysql-slave:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+    command: >
+      --server-id=2
+      --gtid-mode=ON
+      --enforce-gtid-consistency=ON
+      --skip-replica-start
+    volumes:
+      - ./init/slave-init.sql:/docker-entrypoint-initdb.d/slave-init.sql
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  replication-setup:
+    image: mysql:8.0
+    restart: "no"
+    depends_on:
+      mysql-slave:
+        condition: service_healthy
+    command: >
+      bash -c "
+        until mysql -h mysql-slave -uroot -prootpass -e 'SELECT 1' > /dev/null 2>&1; do
+          echo 'Waiting for slave...'; sleep 2;
+        done &&
+        mysql -h mysql-slave -uroot -prootpass -e \"
+          CHANGE REPLICATION SOURCE TO
+            SOURCE_HOST='mysql-master',
+            SOURCE_PORT=3306,
+            SOURCE_USER='replicator',
+            SOURCE_PASSWORD='replpass',
+            SOURCE_AUTO_POSITION=1,
+            GET_SOURCE_PUBLIC_KEY=1;
+          START REPLICA;
+        \"
+      "
+
+  repstatus:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      MYSQL_HOST: mysql-slave
+      MYSQL_PORT: 3306
+      MONITOR_USER: monitor
+      MONITOR_USER_PASSWORD: monitorpass
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: admin123
+    depends_on:
+      mysql-slave:
+        condition: service_healthy
